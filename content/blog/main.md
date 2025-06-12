@@ -6,3 +6,4 @@ description: "Tips from top academic writers on writing powerful essays."
 ---
 
 Writing an essay doesn't have to be hard. Start with a strong thesis statement...
+
