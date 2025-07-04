@@ -26,6 +26,14 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
+      <head>
+    {/* ✅ Correct way to add Flutterwave script in Next.js */}
+    <script
+      src="https://checkout.flutterwave.com/v3.js"
+      async
+      suppressHydrationWarning
+    ></script>
+  </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >

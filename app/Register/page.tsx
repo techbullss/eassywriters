@@ -2,15 +2,24 @@
 
 import { useState } from "react";
 import { signIn } from "next-auth/react";
+import { redirect, useRouter } from 'next/navigation';
+import { getUserFromToken } from "../api/read-token/route";
 
-export default function RegisterPage() {
+export default async function RegisterPage() {
+  const user = await getUserFromToken();
+
+  if (user) {
+    redirect("/dashboard"); // Already authenticated, block access
+  }
+
+  const router = useRouter();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-
+const [success, setSuccess] = useState("");
   const handleEmailRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -26,7 +35,7 @@ export default function RegisterPage() {
 
     setLoading(true);
     try {
-      const res = await fetch("/api/register", {
+      const res = await fetch("http://localhost:8080/api/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name, email, password }),
@@ -36,7 +45,16 @@ export default function RegisterPage() {
         const data = await res.json();
         setError(data.message || "Registration failed.");
       } else {
-        // Handle success e.g. redirect or auto login
+        const data = await res.json();
+        const token=data.token;
+        await fetch("api/save-token",{
+          "method":"POST",
+          headers:{"Content-Type":"application/json"},
+          body:JSON.stringify({token})
+        })
+        // ✅ Save token in HTTP-only cookie via API route
+        setSuccess(data.message);  // ✅ set success message
+  router.push("/dashboard");
       }
     } catch {
       setError("Something went wrong. Please try again.");
@@ -50,7 +68,7 @@ export default function RegisterPage() {
         
 
         <button
-          onClick={() => signIn("google")}
+           onClick={() => signIn("google")}
           className="flex items-center justify-center gap-3 w-full py-2.5 rounded-full  hover:bg-red-700 text-gray-700 font-semibold shadow-md transition duration-300 mb-6 transform hover:scale-105"
         >
           <img
@@ -64,6 +82,11 @@ export default function RegisterPage() {
         <p className="text-center text-gray-600 mb-5 font-medium tracking-wide text-sm">
           Or register with your email
         </p>
+        {success && (
+  <div className="text-green-600 bg-green-100 p-2 rounded">
+    {success}
+  </div>
+)}
 
         {error && (
           <p className="mb-5 text-red-600 font-semibold text-center animate-pulse text-sm">

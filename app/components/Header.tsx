@@ -48,7 +48,7 @@ const Header = () => {
               Order Now
             </button>
           </Link>
-          <Link href="/login">
+          <Link href="/Loging">
             <button className="px-4 py-2 rounded border border-white text-white hover:bg-white hover:text-blue-600 transition">
               Login
             </button>

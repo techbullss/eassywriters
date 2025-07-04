@@ -9,23 +9,30 @@ import {
   BarChart2,
   LogOut
 } from 'lucide-react';
+import { redirect } from 'next/navigation';
+import { getUserFromToken } from '../api/read-token/route';
 
 const navItems = [
   { name: "My Profile", path: "/dashboard/profile", icon: User },
   { name: "Order List", path: "/dashboard/orderlist", icon: ListOrdered },
   { name: "Messages", path: "/dashboard/messages", icon: MessageCircle },
-  { name: "Wallet", path: "/dashboard/wallet", icon: Wallet },
+  { name: "Wallet", path: "/dashboard/Wallet", icon: Wallet },
   { name: "Clients", path: "/dashboard/clients", icon: Users },
   { name: "Finance", path: "/dashboard/finance", icon: BarChart2 },
   { name: "Log Out", path: "/dashboard/logout", icon: LogOut },
 ];
 
-export default function DashboardLayout({ children }: { children: ReactNode }) {
+export default async function DashboardLayout({ children }: { children: ReactNode }) {
+   const user = await getUserFromToken();
+
+  if (!user) {
+    redirect("/Loging");
+  }
   return (
     <div className="flex min-h-screen bg-gray-100">
       {/* Sidebar */}
       <aside className="w-64 bg-white shadow-lg p-5 space-y-6">
-        <h2 className="text-2xl font-bold text-indigo-600 mb-6">Dashboard</h2>
+        <h2 className="text-2xl font-bold text-indigo-600 mb-6"><Link href="/dashboard">Dashboard</Link></h2>
         <nav className="space-y-2">
           {navItems.map(({ name, path, icon: Icon }) => (
             <Link
