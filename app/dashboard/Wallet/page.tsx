@@ -1,4 +1,4 @@
-
+"use client"
 import FlutterwaveTopUp from "@/app/components/FlutterwaveTopUp";
 import PaypalTopUp from "@/app/components/PaypalTopUp";
 export default function WalletPage() {

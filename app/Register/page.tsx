@@ -5,12 +5,8 @@ import { signIn } from "next-auth/react";
 import { redirect, useRouter } from 'next/navigation';
 import { getUserFromToken } from "../api/read-token/route";
 
-export default async function RegisterPage() {
-  const user = await getUserFromToken();
-
-  if (user) {
-    redirect("/dashboard"); // Already authenticated, block access
-  }
+export default  function RegisterPage() {
+  
 
   const router = useRouter();
   const [name, setName] = useState("");

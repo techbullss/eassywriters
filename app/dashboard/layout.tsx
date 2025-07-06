@@ -11,11 +11,12 @@ import {
 } from 'lucide-react';
 import { redirect } from 'next/navigation';
 import { getUserFromToken } from '../api/read-token/route';
+import { Toaster } from 'react-hot-toast';
 
 const navItems = [
   { name: "My Profile", path: "/dashboard/profile", icon: User },
   { name: "Order List", path: "/dashboard/orderlist", icon: ListOrdered },
-  { name: "Messages", path: "/dashboard/messages", icon: MessageCircle },
+  { name: "Messages", path: "/dashboard/Chat", icon: MessageCircle },
   { name: "Wallet", path: "/dashboard/Wallet", icon: Wallet },
   { name: "Clients", path: "/dashboard/clients", icon: Users },
   { name: "Finance", path: "/dashboard/finance", icon: BarChart2 },
@@ -48,7 +49,7 @@ export default async function DashboardLayout({ children }: { children: ReactNod
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 p-8">{children}</main>
+      <main className="flex-1 p-8"> <Toaster position="top-center" />{children}</main>
     </div>
   );
 }

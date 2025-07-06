@@ -3,7 +3,14 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
 import { Eye, Pencil, Trash2 } from "lucide-react";
-
+import router from "next/router";
+import toast from "react-hot-toast";
+import LowBalanceToast from "./LowBalanceToast";
+import EditOrderModal from "./EditOrderModal";
+type Props = {
+  walletBalance: number;
+  email: string;
+};
 type Order = {
   orderId: string;
   email: string;
@@ -25,7 +32,8 @@ type Order = {
   fileUrls?: string[];
 };
 
-function OrdersDashboard() {
+function OrdersDashboard({ walletBalance ,email}: Props) {
+  const [editOrder, setEditOrder] = useState<Order | null>(null)
   const [orders, setOrders] = useState<Order[]>([]);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -95,9 +103,9 @@ function OrdersDashboard() {
     <div className="container mx-auto p-4">
       <h2 className="text-xl font-semibold mb-4">Orders</h2>
 
-      <div className="overflow-x-auto bg-white shadow-md rounded-lg">
-        <table className="min-w-full text-sm text-left">
-          <thead className="bg-gray-100 text-gray-600 uppercase text-xs">
+      <div className="w-full overflow-x-auto bg-white shadow-md rounded-lg">
+        <table className="w-full min-w-[600px] text-sm text-left">
+          <thead className="bg-gray-100 text-gray-600 uppercase text-xs sticky top-0 z-10">
             <tr>
               <th className="px-4 py-2">ID</th>
               <th className="px-4 py-2">Topic</th>
@@ -114,9 +122,48 @@ function OrdersDashboard() {
                 <td className="px-4 py-2">{order.orderId}</td>
                 <td className="px-4 py-2">{order.topic}</td>
                 <td className="px-4 py-2">
-  {order.paymentstatus?.toLowerCase() === "pending" || !order.paymentstatus ? (
+  {order.paymentstatus?.toLowerCase() === "pending" || order.paymentstatus?.toLocaleLowerCase() !== "paid"  || !order.paymentstatus? (
     <button
-      onClick={() => alert(`Handle payment for Order ID: ${order.orderId}`)}
+      onClick={async () => {
+        console.log("Processing payment..."+walletBalance);
+        if (walletBalance < order.amount) {
+         toast.error(
+  (t) => <LowBalanceToast toastId={t.id} />,
+  { duration: 8000 }
+);
+        } else {
+          try {
+            const balance = walletBalance - order.amount;
+            if(balance < 0) {
+              toast.error("Insufficient balance for this payment.");}
+            const res = await axios.put("http://localhost:8080/updateWallet",null, {
+              params:{
+              email,
+              balance,
+             orderId:order.orderId
+              }
+              
+           });
+            
+           if (res.status >= 200 && res.status < 300) {
+
+             // Replace with actual payment result
+              toast.success("Payment successful!");
+              // Refresh the order list
+              setOrders((prev) =>
+                prev.map((o) =>
+                  o.orderId === order.orderId ? { ...o, paymentstatus: "paid" } : o
+                )
+              );
+            } else {
+              toast.error("Payment failed. Please try again.");
+            }
+          } catch (err) {
+            toast.error("Error processing payment.");
+            console.error(err);
+          }
+        }
+      }}
       className="bg-yellow-500 hover:bg-yellow-600 text-white px-3 py-1 rounded text-xs"
     >
       Pay Now
@@ -125,6 +172,7 @@ function OrdersDashboard() {
     <span className="text-green-600 capitalize">{order.paymentstatus}</span>
   )}
 </td>
+
                 <td className="px-4 py-2">{order.orderStatus}</td>
                 <td className="px-4 py-2">
   ${order.amount?.toFixed(2) || "0.00"}
@@ -134,7 +182,7 @@ function OrdersDashboard() {
                   <button onClick={() => setSelectedOrder(order)} className="text-blue-600 hover:text-blue-800">
                     <Eye size={16} />
                   </button>
-                  <button onClick={() => alert("Edit here")} className="text-indigo-600 hover:text-indigo-800">
+                  <button onClick={() => setSelectedOrder(order)} className="text-indigo-600 hover:text-indigo-800">
                     <Pencil size={16} />
                   </button>
                   <button onClick={() => handleDelete(order.orderId)} className="text-red-600 hover:text-red-800">
@@ -145,6 +193,27 @@ function OrdersDashboard() {
             ))}
           </tbody>
         </table>
+        <div className="flex justify-between items-center p-4">
+  <button
+    disabled={page === 0}
+    onClick={() => setPage((prev) => Math.max(prev - 1, 0))}
+    className="px-3 py-1 bg-gray-200 hover:bg-gray-300 rounded disabled:opacity-50"
+  >
+    Previous
+  </button>
+
+  <span className="text-sm text-gray-700">
+    Page {page + 1} of {totalPages}
+  </span>
+
+  <button
+    disabled={page >= totalPages - 1}
+    onClick={() => setPage((prev) => prev + 1)}
+    className="px-3 py-1 bg-gray-200 hover:bg-gray-300 rounded disabled:opacity-50"
+  >
+    Next
+  </button>
+</div>
       </div>
 
       {/* View Modal */}
@@ -212,6 +281,19 @@ function OrdersDashboard() {
           </div>
         </div>
       )}
+      {selectedOrder && (
+  <EditOrderModal
+    order={selectedOrder}
+    onClose={() => setSelectedOrder(null)}
+    onUpdate={(updated) => {
+      setOrders((prev) =>
+        prev.map((o) => (o.orderId === updated.orderId ? updated : o))
+      );
+      setSelectedOrder(null);
+    }}
+  />
+)}
+
     </div>
   );
 }

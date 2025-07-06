@@ -30,39 +30,60 @@ export default function PaypalTopUp() {
 
      <div className="relative z-10 mt-8">
   <PayPalScriptProvider options={{ clientId: process.env.NEXT_PUBLIC_PAYPAL_CLIENT_ID! }}>
-    <PayPalButtons
-      style={{ layout: "vertical" }}
-      createOrder={(data, actions) => {
-        return actions.order.create({
-          intent: "CAPTURE",
-          purchase_units: [
-            {
-              amount: {
-                value: amount,
-                currency_code: "USD",
-              },
+  <PayPalButtons
+    style={{ layout: "vertical" }}
+    createOrder={(data, actions) => {
+      return actions.order.create({
+        intent: "CAPTURE",
+        purchase_units: [
+          {
+            amount: {
+              value: amount,
+              currency_code: "USD",
             },
-          ],
-        });
-      }}
-      onApprove={async (data, actions) => {
-        const details = await actions.order!.capture();
-        const payer = details.payer;
+          },
+        ],
+      });
+    }}
+    onApprove={async (data, actions) => {
+      const details = await actions.order!.capture();
+      const payer = details.payer;
 
-        await fetch("/api/wallet", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            amount,
-            txId: details.id,
-            payerEmail: payer?.email_address,
-          }),
-        });
+      await fetch("/api/wallet", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          amount,
+          txId: details.id,
+          payerEmail: payer?.email_address,
+        }),
+      });
 
-        alert("Top-up successful!");
-      }}
-    />
-  </PayPalScriptProvider>
+      alert("Top-up successful!");
+    }}
+    onCancel={(data) => {
+      console.log("Payment cancelled:", data);
+      alert("You cancelled the payment.");
+    }}
+    onError={(err) => {
+      console.error("Payment error:", err);
+      alert("Payment failed. Please check your balance or try again.");
+    }}
+  />
+</PayPalScriptProvider>
+      </div>
+
+      <div className="mt-4 text-sm text-gray-600">
+        <p>
+          By clicking "Pay with PayPal", you agree to our{" "}
+          <a href="/terms" className="text-blue-600 hover:underline">
+            Terms of Service
+          </a>{" "}
+          and{" "}
+          <a href="/privacy" className="text-blue-600 hover:underline">
+            Privacy Policy
+          </a>.
+        </p>
 </div>
 
     </div>

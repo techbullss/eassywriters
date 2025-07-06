@@ -1,3 +1,5 @@
+
+
 import { redirect } from "next/navigation";
 import { getUserFromToken } from "../api/read-token/route";
 import Link from "next/link";
@@ -77,7 +79,7 @@ if (walletRes.ok) {
         "></span>
       </button>
     </Link>      </div>
-    <div><CurrentOrder /></div>
+    <div><CurrentOrder walletBalance={balance} email={user.sub}/></div>
     </div>
   );
 }
