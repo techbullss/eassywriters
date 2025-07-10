@@ -1,11 +1,10 @@
 
 import { redirect, useRouter } from 'next/navigation';
-import { getUserFromToken } from '../api/read-token/route';
 import LoginForm from '../components/Loginform';
+import { getUserFromToken } from '../api/read-token/route';
 
 export default async function LoginPage() {
-   const user = await getUserFromToken();
-
+  const user = await getUserFromToken();
   if (user) {
     redirect("/dashboard"); 
   }

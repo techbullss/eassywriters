@@ -3,31 +3,23 @@
 import { Client } from "@stomp/stompjs";
 import SockJS from "sockjs-client";
 import React, { useEffect, useRef, useState } from "react";
-import {
-  FiSend,
-  FiUsers,
-  FiFile
-} from "react-icons/fi";
-import {
-  FaFilePdf,
-  FaFileWord,
-  FaFileImage,
-  FaFileAlt,
-  FaFile
-} from "react-icons/fa";
+import { FiSend, FiUsers, FiFile } from "react-icons/fi";
+import { FaFilePdf, FaFileWord, FaFileImage, FaFileAlt, FaFile } from "react-icons/fa";
 import MessageList from "./MessageList";
 
+type MessageStatus = 'SENDING' | 'SENT' | 'DELIVERED' | 'READ'| 'FAILED';
 interface Message {
+  id?: number;
+  tempId?: string;
   senderEmail: string;
   recipientEmail: string;
   content: string;
   timestamp: string;
-  status?: "SENT" | "DELIVERED" | "READ" | "FAILED";
   fileUrl?: string;
   fileName?: string;
-  isread?: boolean;
+  read?: boolean;
   delivered?: boolean;
-  messageId?: number;
+  status?: MessageStatus;
 }
 
 interface User {
@@ -50,18 +42,24 @@ export default function ChatComponent({ currentUser }: { currentUser: string }) 
   const typingTimeout = useRef<NodeJS.Timeout | null>(null);
   const clientRef = useRef<Client | null>(null);
 
+  // File icon helper
   const getFileIcon = (fileName: string) => {
-    if (fileName?.match(/\.(jpg|jpeg|png|gif)$/i)) return <FaFileImage />;
-    if (fileName?.match(/\.pdf$/i)) return <FaFilePdf />;
-    if (fileName?.match(/\.(doc|docx)$/i)) return <FaFileWord />;
-    if (fileName?.match(/\.(txt)$/i)) return <FaFileAlt />;
+    if (!fileName) return <FaFile />;
+    if (/\.(jpg|jpeg|png|gif)$/i.test(fileName)) return <FaFileImage />;
+    if (/\.pdf$/i.test(fileName)) return <FaFilePdf />;
+    if (/\.(doc|docx)$/i.test(fileName)) return <FaFileWord />;
+    if (/\.(txt)$/i.test(fileName)) return <FaFileAlt />;
     return <FaFile />;
   };
 
+  // Track selected user changes
   useEffect(() => {
     selectedUserRef.current = selectedUser;
   }, [selectedUser]);
-
+useEffect(() => {
+  console.log("📨 Messages updated:", messages);
+}, [messages]);
+  // Initial setup
   useEffect(() => {
     connectWebSocket();
     fetchAllUsers();
@@ -71,6 +69,7 @@ export default function ChatComponent({ currentUser }: { currentUser: string }) 
     };
   }, []);
 
+  // Fetch messages when user changes
   useEffect(() => {
     if (selectedUser) fetchMessages(selectedUser);
   }, [selectedUser]);
@@ -83,31 +82,17 @@ export default function ChatComponent({ currentUser }: { currentUser: string }) 
       onConnect: () => {
         console.log("🟢 WebSocket connected");
 
-        client.subscribe("/user/queue/messages", async (msg) => {
-          try {
-            const incoming: Message = JSON.parse(msg.body);
-            const sel = selectedUserRef.current;
-            if (
-              incoming.senderEmail === sel ||
-              incoming.recipientEmail === sel
-            ) {
-              setMessages((prev) => {
-                const exists = prev.some((m) => m.timestamp === incoming.timestamp);
-                return exists ? prev : [...prev, incoming];
-              });
-            }
-            await markAsRead(incoming);
-            await fetch("http://localhost:8080/api/messages/mark-delivered", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ messageId: incoming.messageId })
-  });
-            fetchInbox();
-          } catch (err) {
-            console.error("❌ Failed to parse message:", err);
-          }
-        });
+        // Message subscription
+       client.subscribe("/user/queue/messages", (msg) => {
+  const incoming: Message = JSON.parse(msg.body);
+  const sel = selectedUserRef.current;
+setMessages((m) => [...m, incoming]);
 
+fetchInbox();
+});
+
+
+        // Typing indicator
         client.subscribe("/user/queue/typing", (msg) => {
           const { from } = JSON.parse(msg.body);
           if (from === selectedUserRef.current) {
@@ -115,6 +100,23 @@ export default function ChatComponent({ currentUser }: { currentUser: string }) 
             if (typingTimeout.current) clearTimeout(typingTimeout.current);
             typingTimeout.current = setTimeout(() => setIsTyping(false), 2000);
           }
+        });
+
+        // Delivery receipts
+        client.subscribe("/user/queue/deliveries", (msg) => {
+          const { messageId } = JSON.parse(msg.body);
+         
+          console.log("Message delivered:",JSON.parse(msg.body) );
+        });
+
+        // Read receipts
+        client.subscribe("/user/queue/reads", (msg) => {
+          const { messageId } = JSON.parse(msg.body);
+          console.log("Messagebbbbb read:", messageId);
+          setMessages(prev => prev.map(m => 
+            m.id === messageId ? { ...m, status: 'READ', read: true } : m
+          ));
+
         });
       },
     });
@@ -143,17 +145,14 @@ export default function ChatComponent({ currentUser }: { currentUser: string }) 
     const res = await fetch(`http://localhost:8080/api/messages/msg?${params.toString()}`);
     const data = await res.json();
     setMessages(data);
-    await markAsRead({ senderEmail: targetEmail, recipientEmail: currentUser });
   };
 
   const markAsRead = async (msg: Partial<Message>) => {
-    await fetch(`http://localhost:8080/api/messages/isread`, {
+    if (!msg.id) return;
+    await fetch(`http://localhost:8080/api/messages/mark-read`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        senderEmail: msg.senderEmail,
-        recipientEmail: msg.recipientEmail,
-      }),
+      body: JSON.stringify({ messageId: msg.id }),
     });
   };
 
@@ -170,22 +169,28 @@ export default function ChatComponent({ currentUser }: { currentUser: string }) 
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files?.length) {
-      setFile(e.target.files[0]);
-    }
+    if (e.target.files?.length) setFile(e.target.files[0]);
   };
 
-  const sendMessage = async () => {
-    if (!selectedUser || (!newMessage.trim() && !file)) return;
+ const sendMessage = async () => {
+  if (!selectedUser || (!newMessage.trim() && !file)) return;
 
-    const msg: Message = {
-      senderEmail: currentUser,
-      recipientEmail: selectedUser,
-      content: newMessage,
-      timestamp: new Date().toISOString(),
-      status: "SENT",
-    };
+  const tempId = `temp-${Date.now()}`;
+  const msg: Message = {
+    tempId,
+    senderEmail: currentUser,
+    recipientEmail: selectedUser,
+    content: newMessage,
+    timestamp: new Date().toISOString(),
+    status: 'SENDING',
+    delivered: false,
+    read: false,
+  };
 
+  // Don't push to messages anymore!
+  setNewMessage("");
+
+  try {
     if (file) {
       const formData = new FormData();
       formData.append("file", file);
@@ -198,8 +203,7 @@ export default function ChatComponent({ currentUser }: { currentUser: string }) 
         body: formData,
       });
 
-      const saved = await res.json();
-      setMessages((prev) => [...prev, saved]);
+      // Let WebSocket response handle display
       setFile(null);
     } else {
       if (clientRef.current?.connected) {
@@ -207,17 +211,30 @@ export default function ChatComponent({ currentUser }: { currentUser: string }) 
           destination: "/app/send",
           body: JSON.stringify(msg),
         });
+        console.log("Message bbb sent:", msg);
       }
-      setMessages((prev) => [...prev, msg]);
     }
+  } catch (error) {
+    console.error("Send failed", error);
+    // Optionally show toast or retry indicator
+  }
+};
 
-    setNewMessage("");
-  };
+
+ const handleMessageVisible = (messageId: number) => {
+  if (clientRef.current?.connected) {
+    clientRef.current.publish({
+      destination: `/app/messages/read`,
+      body: JSON.stringify({ messageId }),
+   });
+  }
+};
 
   const getUserInitials = (email: string) => email.charAt(0).toUpperCase();
 
   return (
     <div className="flex h-screen bg-gray-100">
+      {/* Left sidebar - Inbox */}
       <div className="w-1/4 border-r border-gray-200 bg-white">
         <div className="p-4 border-b">
           <h2 className="text-xl font-semibold">Messages</h2>
@@ -227,7 +244,9 @@ export default function ChatComponent({ currentUser }: { currentUser: string }) 
             <div
               key={user.email}
               onClick={() => setSelectedUser(user.email)}
-              className={`flex items-center p-3 rounded-lg cursor-pointer ${selectedUser === user.email ? "bg-blue-100" : "hover:bg-gray-50"}`}
+              className={`flex items-center p-3 rounded-lg cursor-pointer ${
+                selectedUser === user.email ? "bg-blue-100" : "hover:bg-gray-50"
+              }`}
             >
               <div className="relative h-10 w-10 bg-blue-100 text-blue-600 flex items-center justify-center rounded-full">
                 {getUserInitials(user.email)}
@@ -248,7 +267,8 @@ export default function ChatComponent({ currentUser }: { currentUser: string }) 
         </div>
       </div>
 
-      <div className="flex-1 flex flex-col">
+      {/* Main chat area */}
+      <div className="flex-1 flex flex-col  overflow-hidden">
         {selectedUser ? (
           <>
             <div className="p-4 border-b bg-white flex items-center justify-between">
@@ -263,9 +283,13 @@ export default function ChatComponent({ currentUser }: { currentUser: string }) 
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-4 bg-gray-50">
-              <MessageList messages={messages} currentUser={currentUser} />
-            </div>
+         <div className="flex-1 overflow-y-auto scrollable-messages p-4 bg-gray-50">
+          <MessageList 
+            messages={messages} 
+            currentUser={currentUser} 
+            onMessageVisible={handleMessageVisible} 
+          />
+        </div>
 
             {file && (
               <div className="mb-2 p-2 bg-gray-100 border rounded flex items-center space-x-2 mx-4">
@@ -311,6 +335,7 @@ export default function ChatComponent({ currentUser }: { currentUser: string }) 
         )}
       </div>
 
+      {/* Right sidebar - All users */}
       <div className="w-1/4 border-l border-gray-200 bg-white">
         <div className="p-4 border-b">
           <h2 className="text-xl font-semibold flex items-center">
@@ -322,7 +347,9 @@ export default function ChatComponent({ currentUser }: { currentUser: string }) 
             <div
               key={user.email}
               onClick={() => setSelectedUser(user.email)}
-              className={`flex items-center p-3 rounded-lg cursor-pointer ${selectedUser === user.email ? "bg-blue-100" : "hover:bg-gray-50"}`}
+              className={`flex items-center p-3 rounded-lg cursor-pointer ${
+                selectedUser === user.email ? "bg-blue-100" : "hover:bg-gray-50"
+              }`}
             >
               <div className="relative h-10 w-10 bg-gray-200 text-gray-600 flex items-center justify-center rounded-full">
                 {getUserInitials(user.email)}

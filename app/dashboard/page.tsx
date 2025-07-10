@@ -1,12 +1,13 @@
 
 
 import { redirect } from "next/navigation";
-import { getUserFromToken } from "../api/read-token/route";
 import Link from "next/link";
 import CurrentOrder from "../components/CurrentOrder";
+import { getUserFromToken } from "../api/read-token/route";
 
 export default async function DashboardHome() {
   const user = await getUserFromToken();
+    
   if (!user) redirect("/Loging");
 
       // const walletRes = await fetch(`http://localhost:8080/api/balance?email=${user.sub}`);

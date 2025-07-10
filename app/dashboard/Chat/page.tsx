@@ -1,3 +1,4 @@
+
 import { getUserFromToken } from "@/app/api/read-token/route";
 import ChatComponent from "@/app/components/ChatComponent";
 
