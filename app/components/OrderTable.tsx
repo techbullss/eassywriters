@@ -1,9 +1,11 @@
 "use client"
 import React, { useState, useEffect } from 'react';
 import { ArrowUpDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Edit, Trash2, Eye } from 'lucide-react';
+import OrderDetailsModal from './OrderDetailsModal';
 
 interface Order {
   id: string;
+  orderId: string;
   topic: string;
   paymentStatus: 'Paid' | 'Unpaid' | 'Pending' | 'Refunded';
   orderStatus: 'Completed' | 'Inprogress' | 'Cancelled' | 'Inrevision' | 'Pending';
@@ -25,34 +27,46 @@ const OrderTable = () => {
   });
 
   const tabs = ['All', 'Completed', 'Inprogress', 'Paid', 'Unpaid', 'Inrevision', 'Pending', 'Cancelled'];
+const [viewingOrderId, setViewingOrderId] = useState<string | null>(null);
 
+  const handleViewOrder = (orderId: string) => {
+    setViewingOrderId(orderId);
+  };
+
+  const closeModal = () => {
+    setViewingOrderId(null);
+  };
   // Fetch data from backend
   useEffect(() => {
     const fetchOrders = async () => {
-      try {
-        setLoading(true);
-        let url = `http://localhost:8080/uploads/api/orders?page=${pagination.page}&size=${pagination.size}`;
-        
-        if (activeTab !== 'All') {
-          url += `&status=${activeTab.toLowerCase()}`;
-        }
-        
-        const response = await fetch(url);
-        const data = await response.json();
-        
-        setOrders(data.content);
-        setPagination(prev => ({
-          ...prev,
-          totalElements: data.totalElements,
-          totalPages: data.totalPages
-        }));
-      } catch (error) {
-        console.error('Error fetching orders:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
+  try {
+    setLoading(true);
+    let url = `http://localhost:8080/uploads/api/orderslisting?page=${pagination.page}&size=${pagination.size}`;
+    
+    // Handle order status filters
+    if (['inprogress', 'completed', 'cancelled', 'inrevision', 'pending'].includes(activeTab.toLowerCase())) {
+      url += `&orderStatus=${activeTab.toLowerCase()}`;
+    }
+    // Handle payment status filters
+    else if (['paid', 'unpaid', 'pending', 'refunded'].includes(activeTab.toLowerCase())) {
+      url += `&paymentStatus=${activeTab.toLowerCase()}`;
+    }
+    
+    const response = await fetch(url);
+    const data = await response.json();
+    
+    setOrders(data.content);
+    setPagination(prev => ({
+      ...prev,
+      totalElements: data.totalElements,
+      totalPages: data.totalPages
+    }));
+  } catch (error) {
+    console.error('Error fetching orders:', error);
+  } finally {
+    setLoading(false);
+  }
+};
     fetchOrders();
   }, [activeTab, pagination.page, pagination.size]);
 
@@ -176,7 +190,7 @@ const OrderTable = () => {
                 <tr>
                   <th 
                     className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer"
-                    onClick={() => requestSort('id')}
+                    onClick={() => requestSort('orderId')}
                   >
                     <div className="flex items-center">
                       ID
@@ -225,7 +239,7 @@ const OrderTable = () => {
                 {sortedOrders.length > 0 ? (
                   sortedOrders.map((order) => (
                     <tr key={order.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{order.id}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{order.orderId}</td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{order.topic}</td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         {statusBadge(order.paymentStatus, 'payment')}
@@ -243,22 +257,11 @@ const OrderTable = () => {
                         <div className="flex space-x-2">
                           <button 
                             className="text-blue-600 hover:text-blue-900"
-                            onClick={() => console.log('View', order.id)}
-                          >
+                              onClick={() => handleViewOrder(order.orderId)}                          >
                             <Eye size={16} />
                           </button>
-                          <button 
-                            className="text-green-600 hover:text-green-900"
-                            onClick={() => console.log('Edit', order.id)}
-                          >
-                            <Edit size={16} />
-                          </button>
-                          <button 
-                            className="text-red-600 hover:text-red-900"
-                            onClick={() => console.log('Delete', order.id)}
-                          >
-                            <Trash2 size={16} />
-                          </button>
+                         
+                         
                         </div>
                       </td>
                     </tr>
@@ -357,8 +360,14 @@ const OrderTable = () => {
           )}
         </>
       )}
+      <OrderDetailsModal 
+      orderId={viewingOrderId || ''} 
+      isOpen={!!viewingOrderId} 
+      onClose={closeModal} 
+    />
     </div>
   );
+  
 };
 
 export default OrderTable;

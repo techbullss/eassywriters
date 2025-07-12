@@ -2,15 +2,31 @@
 
 import React, { useState, useEffect } from "react";
 import axios from "axios";
-import { Eye, Pencil, Trash2 } from "lucide-react";
+import { Eye, Pencil, Trash2, Folder, File, CheckCircle, FileEdit, X } from "lucide-react";
 import router from "next/router";
 import toast from "react-hot-toast";
 import LowBalanceToast from "./LowBalanceToast";
 import EditOrderModal from "./EditOrderModal";
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { 
+  faFilePdf, 
+  faFileWord, 
+  faFileImage, 
+  faFile
+} from '@fortawesome/free-solid-svg-icons';
 type Props = {
   walletBalance: number;
   email: string;
 };
+
+type OrderFile = {
+  id: string;
+  name: string;
+  url: string;
+  status: 'draft' | 'completed' | 'finalCopy';
+  uploadedAt: string;
+};
+
 type Order = {
   orderId: string;
   email: string;
@@ -29,23 +45,28 @@ type Order = {
   paymentstatus: string;
   amount: number;
   createdAt: string;
-  fileUrls?: string[];
+  fileUrls?: OrderFile[];
 };
 
-function OrdersDashboard({ walletBalance ,email}: Props) {
-  const [editOrder, setEditOrder] = useState<Order | null>(null)
+function OrdersDashboard({ walletBalance, email }: Props) {
+  const [editOrder, setEditOrder] = useState<Order | null>(null);
   const [orders, setOrders] = useState<Order[]>([]);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [page, setPage] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
+  const [selectedFiles, setSelectedFiles] = useState<OrderFile[]>([]);
+  const [isFilesModalOpen, setIsFilesModalOpen] = useState(false);
+const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
+const [orderFiles, setOrderFiles] = useState<{fileUrls: string[], filenames: string[]} | null>(null);
 
   useEffect(() => {
     const fetchOrders = async () => {
       try {
         const response = await axios.get(`http://localhost:8080/uploads/api/orders?page=${page}&size=10`);
         setOrders(response.data.content);
+        console.error("Error fetching orders:",JSON.stringify(response.data));
         setTotalPages(response.data.totalPages);
       } catch (error) {
         console.error("Error fetching orders:", error);
@@ -54,6 +75,30 @@ function OrdersDashboard({ walletBalance ,email}: Props) {
 
     fetchOrders();
   }, [page]);
+  const getFileIcon = (fileType: string) => {
+  switch(fileType) {
+    case 'pdf':
+      return <FontAwesomeIcon icon={faFilePdf} className="h-5 w-5 text-red-500" />;
+    case 'word':
+      return <FontAwesomeIcon icon={faFileWord} className="h-5 w-5 text-blue-500" />;
+    case 'image':
+      return <FontAwesomeIcon icon={faFileImage} className="h-5 w-5 text-green-500" />;
+    default:
+      return <FontAwesomeIcon icon={faFile} className="h-5 w-5 text-gray-400" />;
+  }
+};
+const fetchOrderFiles = async (orderId: string) => {
+  try {
+    const response = await axios.get(`http://localhost:8080/uploads/api/orders/files?orderId=${orderId}`);
+    setOrderFiles(response.data);
+    setSelectedOrderId(orderId);
+    setIsFilesModalOpen(true);
+    console
+  } catch (error) {
+    console.error("Error fetching order files:", error);
+    toast.error("Failed to load files");
+  }
+};
 
   const handleDelete = async (orderId: string) => {
     try {
@@ -69,7 +114,19 @@ function OrdersDashboard({ walletBalance ,email}: Props) {
       setSelectedFile(e.target.files[0]);
     }
   };
+const [selectedFileType, setSelectedFileType] = useState<string | null>(null);
 
+const getFileType = (filename: string): string => {
+  if (!filename) return 'unknown';
+  const parts = filename.split('.');
+  if (parts.length < 2) return 'unknown';
+  
+  const extension = parts.pop()?.toLowerCase() ?? '';
+  if (['pdf'].includes(extension)) return 'pdf';
+  if (['doc', 'docx'].includes(extension)) return 'word';
+  if (['jpg', 'jpeg', 'png', 'gif'].includes(extension)) return 'image';
+  return 'unknown';
+};
   const handleUpload = async (orderId: string) => {
     if (!selectedFile) return;
     setIsUploading(true);
@@ -87,7 +144,19 @@ function OrdersDashboard({ walletBalance ,email}: Props) {
       setOrders((prevOrders) =>
         prevOrders.map((order) =>
           order.orderId === orderId
-            ? { ...order, fileUrls: [...(order.fileUrls || []), response.data.fileUrl] }
+            ? { 
+                ...order, 
+                files: [
+                  ...(order.fileUrls || []), 
+                  {
+                    id: Date.now().toString(),
+                    name: selectedFile.name,
+                    url: response.data.fileUrl,
+                    status: 'draft',
+                    uploadedAt: new Date().toISOString()
+                  }
+                ] 
+              }
             : order
         )
       );
@@ -96,6 +165,47 @@ function OrdersDashboard({ walletBalance ,email}: Props) {
       console.error("Upload error:", error);
     } finally {
       setIsUploading(false);
+    }
+  };
+
+  const handleOpenFilesModal = (files: OrderFile[] = []) => {
+    setSelectedFiles(files);
+    setIsFilesModalOpen(true);
+  };
+
+  const handleUpdateFileStatus = async (orderId: string, fileId: string, status: 'draft' | 'completed' | 'finalCopy') => {
+    try {
+      // First update locally for instant feedback
+      setOrders(prevOrders =>
+        prevOrders.map(order =>
+          order.orderId === orderId
+            ? {
+                ...order,
+                files: order.fileUrls?.map(file =>
+                  file.id === fileId ? { ...file, status } : file
+                ) || []
+              }
+            : order
+        )
+      );
+
+      // Update in the files modal view
+      setSelectedFiles(prevFiles =>
+        prevFiles.map(file =>
+          file.id === fileId ? { ...file, status } : file
+        )
+      );
+
+      // Then make API call to persist the change
+      await axios.put(
+        `http://localhost:8080/uploads/api/orders/${orderId}/files/${fileId}/status`,
+        { status }
+      );
+
+      toast.success("File status updated successfully");
+    } catch (error) {
+      console.error("Error updating file status:", error);
+      toast.error("Failed to update file status");
     }
   };
 
@@ -113,6 +223,7 @@ function OrdersDashboard({ walletBalance ,email}: Props) {
               <th className="px-4 py-2">OrderStatus</th>
               <th className="px-4 py-2">Amount</th>
               <th className="px-4 py-2">Deadline</th>
+              <th className="px-4 py-2">Files</th>
               <th className="px-4 py-2">Actions</th>
             </tr>
           </thead>
@@ -122,62 +233,70 @@ function OrdersDashboard({ walletBalance ,email}: Props) {
                 <td className="px-4 py-2">{order.orderId}</td>
                 <td className="px-4 py-2">{order.topic}</td>
                 <td className="px-4 py-2">
-  {order.paymentstatus?.toLowerCase() === "pending" || order.paymentstatus?.toLocaleLowerCase() !== "paid"  || !order.paymentstatus? (
-    <button
-      onClick={async () => {
-        console.log("Processing payment..."+walletBalance);
-        if (walletBalance < order.amount) {
-         toast.error(
-  (t) => <LowBalanceToast toastId={t.id} />,
-  { duration: 8000 }
-);
-        } else {
-          try {
-            const balance = walletBalance - order.amount;
-            if(balance < 0) {
-              toast.error("Insufficient balance for this payment.");}
-            const res = await axios.put("http://localhost:8080/updateWallet",null, {
-              params:{
-              email,
-              balance,
-             orderId:order.orderId
-              }
-              
-           });
-            
-           if (res.status >= 200 && res.status < 300) {
-
-             // Replace with actual payment result
-              toast.success("Payment successful!");
-              // Refresh the order list
-              setOrders((prev) =>
-                prev.map((o) =>
-                  o.orderId === order.orderId ? { ...o, paymentstatus: "paid" } : o
-                )
-              );
-            } else {
-              toast.error("Payment failed. Please try again.");
-            }
-          } catch (err) {
-            toast.error("Error processing payment.");
-            console.error(err);
-          }
-        }
-      }}
-      className="bg-yellow-500 hover:bg-yellow-600 text-white px-3 py-1 rounded text-xs"
-    >
-      Pay Now
-    </button>
-  ) : (
-    <span className="text-green-600 capitalize">{order.paymentstatus}</span>
-  )}
-</td>
-
+                  {order.paymentstatus?.toLowerCase() === "pending" || 
+                  order.paymentstatus?.toLowerCase() !== "paid" || 
+                  !order.paymentstatus ? (
+                    <button
+                      onClick={async () => {
+                        console.log("Processing payment..." + walletBalance);
+                        if (walletBalance < order.amount) {
+                          toast.error(
+                            (t) => <LowBalanceToast toastId={t.id} />,
+                            { duration: 8000 }
+                          );
+                        } else {
+                          try {
+                            const balance = walletBalance - order.amount;
+                            if (balance < 0) {
+                              toast.error("Insufficient balance for this payment.");
+                            }
+                            const res = await axios.put("http://localhost:8080/updateWallet", null, {
+                              params: {
+                                email,
+                                balance,
+                                orderId: order.orderId
+                              }
+                            });
+                            
+                            if (res.status >= 200 && res.status < 300) {
+                              toast.success("Payment successful!");
+                              setOrders((prev) =>
+                                prev.map((o) =>
+                                  o.orderId === order.orderId ? { ...o, paymentstatus: "paid" } : o
+                                )
+                              );
+                            } else {
+                              toast.error("Payment failed. Please try again.");
+                            }
+                          } catch (err) {
+                            toast.error("Error processing payment.");
+                            console.error(err);
+                          }
+                        }
+                      }}
+                      className="bg-yellow-500 hover:bg-yellow-600 text-white px-3 py-1 rounded text-xs"
+                    >
+                      Pay Now
+                    </button>
+                  ) : (
+                    <span className="text-green-600 capitalize">{order.paymentstatus}</span>
+                  )}
+                </td>
                 <td className="px-4 py-2">{order.orderStatus}</td>
-                <td className="px-4 py-2">
-  ${order.amount?.toFixed(2) || "0.00"}
-</td>
+                <td className="px-4 py-2">${order.amount?.toFixed(2) || "0.00"}</td>
                 <td className="px-4 py-2">{order.deadline}</td>
+                <td className="px-4 py-2">
+                  <button
+  onClick={() => fetchOrderFiles(order.orderId)}
+  className={`p-1 rounded-md ${
+    order.fileUrls?.length ? 'text-blue-600 hover:bg-blue-50' : 'text-gray-400'
+  }`}
+  disabled={!order.fileUrls?.length}
+>
+  <Folder className="h-5 w-5" />
+  {order.fileUrls?.length ? ` (${order.fileUrls.length})` : ''}
+</button>
+                </td>
                 <td className="px-4 py-2 flex space-x-2">
                   <button onClick={() => setSelectedOrder(order)} className="text-blue-600 hover:text-blue-800">
                     <Eye size={16} />
@@ -194,29 +313,140 @@ function OrdersDashboard({ walletBalance ,email}: Props) {
           </tbody>
         </table>
         <div className="flex justify-between items-center p-4">
-  <button
-    disabled={page === 0}
-    onClick={() => setPage((prev) => Math.max(prev - 1, 0))}
-    className="px-3 py-1 bg-gray-200 hover:bg-gray-300 rounded disabled:opacity-50"
-  >
-    Previous
-  </button>
-
-  <span className="text-sm text-gray-700">
-    Page {page + 1} of {totalPages}
-  </span>
-
-  <button
-    disabled={page >= totalPages - 1}
-    onClick={() => setPage((prev) => prev + 1)}
-    className="px-3 py-1 bg-gray-200 hover:bg-gray-300 rounded disabled:opacity-50"
-  >
-    Next
-  </button>
-</div>
+          <button
+            disabled={page === 0}
+            onClick={() => setPage((prev) => Math.max(prev - 1, 0))}
+            className="px-3 py-1 bg-gray-200 hover:bg-gray-300 rounded disabled:opacity-50"
+          >
+            Previous
+          </button>
+          <span className="text-sm text-gray-700">
+            Page {page + 1} of {totalPages}
+          </span>
+          <button
+            disabled={page >= totalPages - 1}
+            onClick={() => setPage((prev) => prev + 1)}
+            className="px-3 py-1 bg-gray-200 hover:bg-gray-300 rounded disabled:opacity-50"
+          >
+            Next
+          </button>
+        </div>
       </div>
 
-      {/* View Modal */}
+     {/* Files Modal */}
+{isFilesModalOpen && orderFiles && (
+  <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[80vh] overflow-y-auto">
+      <div className="flex justify-between items-center border-b p-4">
+        <h3 className="text-lg font-semibold">Files for Order {selectedOrderId}</h3>
+        <button onClick={() => setIsFilesModalOpen(false)} className="text-gray-500 hover:text-gray-700">
+          <X size={24} />
+        </button>
+      </div>
+      
+        <div className="p-4">
+        <h4 className="font-medium text-gray-700 mb-3">Current Files</h4>
+        {orderFiles?.fileUrls?.length > 0 ? (
+          <ul className="divide-y">
+            {orderFiles.fileUrls.map((url, index) => {
+              const filename = orderFiles.filenames?.[index] || url.split('/').pop() || `File ${index + 1}`;
+              const fileType = getFileType(filename);
+              
+              return (
+                <li key={index} className="py-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center">
+                      {getFileIcon(fileType)}
+                      <a 
+                        href={url} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="text-blue-600 hover:underline ml-2"
+                      >
+                        {filename}
+                      </a>
+                    </div>
+                    
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        ) : (
+          <div className="text-center py-8 text-gray-500 bg-gray-50 rounded-md">
+            No files uploaded yet
+          </div>
+        )
+        }
+      </div>
+       <div className="p-4 border-t">
+        <h4 className="font-medium text-gray-700 mb-3">Upload New File</h4>
+        
+        {/* File Type Selection */}
+        <div className="mb-4">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Select File Type
+          </label>
+          <div className="grid grid-cols-3 gap-2">
+            {['draft', 'completed', 'extra'].map((type) => (
+              <label key={type} className="inline-flex items-center p-3 border rounded-lg hover:bg-gray-50">
+                <input
+                  type="radio"
+                  name="fileType"
+                  value={type}
+                  onChange={() => setSelectedFileType(type)}
+                  className="h-4 w-4 text-blue-600"
+                  required
+                />
+                <span className="ml-2 text-sm text-gray-700 capitalize">
+                  {type === 'extra' ? 'Additional Files' : type}
+                </span>
+              </label>
+            ))}
+          </div>
+        </div>
+
+        {/* File Upload */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Select File (PDF, DOC/DOCX, JPG/PNG only)
+          </label>
+          <div className="flex items-center space-x-4">
+            <input
+              type="file"
+              onChange={handleFileChange}
+              accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+              className="block w-full text-sm text-gray-500
+                file:mr-4 file:py-2 file:px-4
+                file:rounded-md file:border-0
+                file:text-sm file:font-semibold
+                file:bg-blue-50 file:text-blue-700
+                hover:file:bg-blue-100"
+            />
+            <button
+            onClick={() => handleUpload(selectedOrderId || '')}
+              disabled={!selectedFile || !selectedFileType}
+              className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+            >
+              Upload
+            </button>
+          </div>
+          <p className="mt-1 text-xs text-gray-500">
+            Max file size: 10MB. Allowed types: PDF, Word, JPG, PNG
+          </p>
+        </div>
+      </div>
+      <div className="flex justify-end p-4 border-t">
+        <button
+          onClick={() => setIsFilesModalOpen(false)}
+          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+        >
+          Close
+        </button>
+      </div>
+    </div>
+  </div>
+)}   {/* View Order Modal */}
       {selectedOrder && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-start justify-center z-50 pt-10">
           <div className="bg-white w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-lg shadow-lg p-6 relative">
@@ -239,16 +469,11 @@ function OrdersDashboard({ walletBalance ,email}: Props) {
               <p><strong>Slides:</strong> {selectedOrder.slides}</p>
               <p><strong>Spacing:</strong> {selectedOrder.spacing}</p>
               <p><strong>Word Count:</strong> {selectedOrder.wordCount}</p>
-             <p><strong>Price:</strong> ${selectedOrder.price?.toFixed(2) || "0.00"}</p>
-<p><strong>Amount:</strong> ${selectedOrder.amount?.toFixed(2) || "0.00"}</p>
+              <p><strong>Price:</strong> ${selectedOrder.price?.toFixed(2) || "0.00"}</p>
+              <p><strong>Amount:</strong> ${selectedOrder.amount?.toFixed(2) || "0.00"}</p>
               <p><strong>Status:</strong> {selectedOrder.orderStatus}</p>
               <p><strong>Payment:</strong> {selectedOrder.paymentstatus}</p>
-              <p><strong>Created At:</strong> {typeof window !== 'undefined' && (
-  <p>
-    <strong>Created At:</strong>{" "}
-    {new Date(selectedOrder.createdAt).toLocaleString()}
-  </p>
-)}</p>
+              <p><strong>Created At:</strong> {new Date(selectedOrder.createdAt).toLocaleString()}</p>
             </div>
             <div className="mt-4">
               <strong>Instructions:</strong>
@@ -259,21 +484,34 @@ function OrdersDashboard({ walletBalance ,email}: Props) {
 
             <div className="mt-4">
               <strong>Files:</strong>
-              <ul className="list-disc list-inside text-sm text-blue-600">
-                {selectedOrder.fileUrls?.map((url, index) => (
-                  <li key={index}>
-                    <a href={url} target="_blank" rel="noopener noreferrer">File {index + 1}</a>
-                  </li>
-                ))}
-              </ul>
+              {selectedOrder.fileUrls?.length ? (
+                <button
+                  onClick={() => handleOpenFilesModal(selectedOrder.fileUrls)}
+                  className="flex items-center text-blue-600 hover:text-blue-800 mt-2"
+                >
+                  <Folder className="h-5 w-5 mr-1" />
+                  View Files ({selectedOrder.fileUrls.length})
+                </button>
+              ) : (
+                <p className="text-gray-500">No files uploaded</p>
+              )}
             </div>
 
             <div className="mt-4">
-              <input type="file" onChange={handleFileChange} className="mb-2" />
+              <input 
+                type="file" 
+                onChange={handleFileChange} 
+                className="mb-2 block w-full text-sm text-gray-500
+                  file:mr-4 file:py-2 file:px-4
+                  file:rounded-md file:border-0
+                  file:text-sm file:font-semibold
+                  file:bg-blue-50 file:text-blue-700
+                  hover:file:bg-blue-100"
+              />
               <button
                 onClick={() => handleUpload(selectedOrder.orderId)}
                 disabled={isUploading || !selectedFile}
-                className="bg-blue-600 text-white px-4 py-1 rounded hover:bg-blue-700 disabled:opacity-50"
+                className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:opacity-50"
               >
                 {isUploading ? "Uploading..." : "Upload File"}
               </button>
@@ -281,19 +519,8 @@ function OrdersDashboard({ walletBalance ,email}: Props) {
           </div>
         </div>
       )}
-      {selectedOrder && (
-  <EditOrderModal
-    order={selectedOrder}
-    onClose={() => setSelectedOrder(null)}
-    onUpdate={(updated) => {
-      setOrders((prev) =>
-        prev.map((o) => (o.orderId === updated.orderId ? updated : o))
-      );
-      setSelectedOrder(null);
-    }}
-  />
-)}
 
+     
     </div>
   );
 }

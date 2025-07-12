@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import CurrentOrder from "../components/CurrentOrder";
 import { getUserFromToken } from "../api/read-token/route";
+import FilterOrder from "../components/FilterOrder";
 
 export default async function DashboardHome() {
   const user = await getUserFromToken();
@@ -37,7 +38,8 @@ if (walletRes.ok) {
 
   return (
     <div className="text-gray-800">
-      <div >
+      <div className="flex items-center  gap-2 flex-row">
+        <div>
       <p className="mb-0">Wallet Balance: <span className="font-semibold text-green-600">${balance.toFixed(2)}</span></p>
  <Link href="dashboard/Wallet">
       <button className="
@@ -79,7 +81,12 @@ if (walletRes.ok) {
           pointer-events-none
         "></span>
       </button>
-    </Link>      </div>
+    </Link>  
+        </div>
+      
+    <div><FilterOrder /></div>
+    
+       </div>
     <div><CurrentOrder walletBalance={balance} email={user.sub}/></div>
     </div>
   );
