@@ -221,24 +221,7 @@ const OrderDetailsModal = ({ orderId, isOpen, onClose }: OrderDetailsModalProps)
                   </div>
                 </div>
 
-                {orderDetails.fileUrls && orderDetails.fileUrls.length > 0 && (
-                  <div className="space-y-3 rounded-lg border p-4">
-                    <h4 className="text-lg font-medium text-gray-700">Attachments</h4>
-                    <div className="flex flex-wrap gap-2">
-                      {orderDetails.fileUrls.map((url, index) => (
-                        <a
-                          key={index}
-                          href={url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-sm text-blue-600 underline hover:text-blue-800"
-                        >
-                          File {index + 1}
-                        </a>
-                      ))}
-                    </div>
-                  </div>
-                )}
+              
               </div>
             ) : null}
           </div>

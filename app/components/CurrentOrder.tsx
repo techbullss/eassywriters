@@ -6,7 +6,7 @@ import { Eye, Pencil, Trash2, Folder, File, CheckCircle, FileEdit, X } from "luc
 import router from "next/router";
 import toast from "react-hot-toast";
 import LowBalanceToast from "./LowBalanceToast";
-import EditOrderModal from "./EditOrderModal";
+import { format } from 'date-fns';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { 
   faFilePdf, 
@@ -14,9 +14,10 @@ import {
   faFileImage, 
   faFile
 } from '@fortawesome/free-solid-svg-icons';
+import { useSearchStore } from "../store/searchStore";
 type Props = {
   walletBalance: number;
-  email: string;
+  emails: string;
 };
 
 type OrderFile = {
@@ -48,7 +49,7 @@ type Order = {
   fileUrls?: OrderFile[];
 };
 
-function OrdersDashboard({ walletBalance, email }: Props) {
+function OrdersDashboard({ walletBalance, emails }: Props) {
   const [editOrder, setEditOrder] = useState<Order | null>(null);
   const [orders, setOrders] = useState<Order[]>([]);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
@@ -60,7 +61,25 @@ function OrdersDashboard({ walletBalance, email }: Props) {
   const [isFilesModalOpen, setIsFilesModalOpen] = useState(false);
 const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
 const [orderFiles, setOrderFiles] = useState<{fileUrls: string[], filenames: string[]} | null>(null);
+const { orderId, email, startDate, endDate } = useSearchStore();
+  const [filteredData, setFilteredData] = useState([]);
 
+  useEffect(() => {
+    // Fetch data whenever filters change
+    const fetchData = async () => {
+      const response = await axios.get('http://localhost:8080/uploads/api/filterorders', {
+        params: { 
+           orderId: orderId || null,
+           email: email?.trim() || null,
+            startDate: startDate ? format(startDate, 'yyyy-MM-dd') : null,
+      endDate: endDate ? format(endDate, 'yyyy-MM-dd') : null}
+      });
+    
+      setOrders(response.data.content || []);
+    };
+
+    fetchData();
+  }, [orderId, email, startDate, endDate]);
   useEffect(() => {
     const fetchOrders = async () => {
       try {
@@ -289,9 +308,8 @@ const getFileType = (filename: string): string => {
                   <button
   onClick={() => fetchOrderFiles(order.orderId)}
   className={`p-1 rounded-md ${
-    order.fileUrls?.length ? 'text-blue-600 hover:bg-blue-50' : 'text-gray-400'
+    order.fileUrls? 'text-blue-600 hover:bg-blue-50' : 'text-gray-400'
   }`}
-  disabled={!order.fileUrls?.length}
 >
   <Folder className="h-5 w-5" />
   {order.fileUrls?.length ? ` (${order.fileUrls.length})` : ''}
@@ -482,40 +500,7 @@ const getFileType = (filename: string): string => {
               </p>
             </div>
 
-            <div className="mt-4">
-              <strong>Files:</strong>
-              {selectedOrder.fileUrls?.length ? (
-                <button
-                  onClick={() => handleOpenFilesModal(selectedOrder.fileUrls)}
-                  className="flex items-center text-blue-600 hover:text-blue-800 mt-2"
-                >
-                  <Folder className="h-5 w-5 mr-1" />
-                  View Files ({selectedOrder.fileUrls.length})
-                </button>
-              ) : (
-                <p className="text-gray-500">No files uploaded</p>
-              )}
-            </div>
-
-            <div className="mt-4">
-              <input 
-                type="file" 
-                onChange={handleFileChange} 
-                className="mb-2 block w-full text-sm text-gray-500
-                  file:mr-4 file:py-2 file:px-4
-                  file:rounded-md file:border-0
-                  file:text-sm file:font-semibold
-                  file:bg-blue-50 file:text-blue-700
-                  hover:file:bg-blue-100"
-              />
-              <button
-                onClick={() => handleUpload(selectedOrder.orderId)}
-                disabled={isUploading || !selectedFile}
-                className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:opacity-50"
-              >
-                {isUploading ? "Uploading..." : "Upload File"}
-              </button>
-            </div>
+            
           </div>
         </div>
       )}

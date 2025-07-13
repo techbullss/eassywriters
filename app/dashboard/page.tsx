@@ -44,7 +44,7 @@ if (walletRes.ok) {
  <Link href="dashboard/Wallet">
       <button className="
         relative
-        px-6 py-3
+        px-2 py-3
         bg-emerald-500 hover:bg-emerald-600
         rounded-lg
         shadow-md hover:shadow-lg
@@ -87,7 +87,7 @@ if (walletRes.ok) {
     <div><FilterOrder /></div>
     
        </div>
-    <div><CurrentOrder walletBalance={balance} email={user.sub}/></div>
+    <div><CurrentOrder walletBalance={balance} emails={user.sub}/></div>
     </div>
   );
 }
